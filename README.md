@@ -22,6 +22,15 @@ source venv/bin/activate
 pip3 install -r requirements.txt
 ```
 
+It can be that you also have to install the basemap package yourself:
+
+```
+pip3 install -U git+https://github.com/matplotlib/basemap.git 
+```
+
+(There can be some issues with the version of matplotlib and basemap, see:
+https://github.com/matplotlib/basemap/issues/439).
+
 ## Start
 
 You can run the python notebook with
@@ -31,4 +40,5 @@ jupyter notebook
 
 ## Known issues
 
-There are no know issues :-).
+There is an error on importing basemap from within the jupyter notebook.
+But once the code runs inside of a python3 console, the import works.
