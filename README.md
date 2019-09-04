@@ -7,6 +7,8 @@ Our aim is to provide:
 - example code to work with the output of the services
 - give people the option to interactivly play around with the parameters for the processes
 - test the services
+- extract the code to provide a library to use our web services and work
+  them in the scientific python ecosystem.
 
 ## Requirements
 
