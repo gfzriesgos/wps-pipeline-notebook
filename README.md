@@ -12,11 +12,13 @@ Our aim is to provide:
 
 ## Requirements
 
-This is a python3 project. It is tested with Python 3.6.8
+This is a python3 project. It is tested with Python 3.6.8 and with an virtual environment.
 
 To download the necessary python packages you can use the requirements.txt file.
 
 ```shell
+python3 -m venv venv
+source venv/bin/activate
 pip3 install -r requirements.txt
 ```
 
