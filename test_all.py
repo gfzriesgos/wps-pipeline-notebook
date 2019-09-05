@@ -735,11 +735,11 @@ def test_quakeml2df():
     '''
 
     xml = le.fromstring(raw_xml)
-    df = gfzwpsformatconversions.quakeml2df(xml)
+    dataframe = gfzwpsformatconversions.quakeml2df(xml)
 
-    assert len(df) == 12
+    assert len(dataframe) == 12
 
-    first_one = df.iloc[0]
+    first_one = dataframe.iloc[0]
     assert first_one['eventID'] == 'quakeml:quakeledger/CHOA_116'
     assert first_one['type'] == 'expert'
     assert first_one['year'] == 2018

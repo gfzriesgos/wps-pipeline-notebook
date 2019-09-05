@@ -15,6 +15,9 @@ import pandas as pd
 
 
 class QuakeML():
+    '''
+    Class for handling quakeml data conversion.
+    '''
     def __init__(self, xml):
         self._xml = xml
 
@@ -39,6 +42,9 @@ class QuakeML():
         return '{http://quakeml.org/xmlns/bed/1.2}' + element
 
     def to_dataframe(self):
+        '''
+        Converts the quakeml data to a pandas dataframe.
+        '''
         # initialize catalog
         index = [i for i in range(len(self._xml))]
         columns = [
@@ -99,23 +105,23 @@ class QuakeML():
                 QuakeML._add_namespace('time')).findtext(
                     QuakeML._add_namespace('uncertainty')))
             # latitude/longitude/depth
-            latitude, latitudeUncertainty = QuakeML._get_uncertain_child(
+            latitude, latitude_uncertainty = QuakeML._get_uncertain_child(
                 origin, QuakeML._add_namespace('latitude'))
 
             catalog.iloc[i].latitude = latitude
-            catalog.iloc[i].latitudeUncertainty = latitudeUncertainty
+            catalog.iloc[i].latitudeUncertainty = latitude_uncertainty
 
-            longitude, longitudeUncertainty = QuakeML._get_uncertain_child(
+            longitude, longitude_uncertainty = QuakeML._get_uncertain_child(
                 origin, QuakeML._add_namespace('longitude'))
 
             catalog.iloc[i].longitude = longitude
-            catalog.iloc[i].longitudeUncertainty = longitudeUncertainty
+            catalog.iloc[i].longitudeUncertainty = longitude_uncertainty
 
-            depth, depthUncertainty = QuakeML._get_uncertain_child(
+            depth, depth_uncertainty = QuakeML._get_uncertain_child(
                 origin, QuakeML._add_namespace('depth'))
 
             catalog.iloc[i].depth = depth
-            catalog.iloc[i].depthUncertainty = depthUncertainty
+            catalog.iloc[i].depthUncertainty = depth_uncertainty
 
             # agency/provider
             catalog.iloc[i].agency = origin.find(
@@ -130,47 +136,47 @@ class QuakeML():
             catalog.iloc[i].magnitudeUncertainty = mag_uncertainty
 
             # originUncertainty
-            originUncertainty = origin.find(
+            origin_uncertainty = origin.find(
                 QuakeML._add_namespace('originUncertainty'))
             catalog.iloc[i].horizontalUncertainty = QuakeML._as_float(
-                originUncertainty.find(
+                origin_uncertainty.find(
                     QuakeML._add_namespace('horizontalUncertainty')).findtext(
                         QuakeML._add_namespace('value')))
             catalog.iloc[i].minHorizontalUncertainty = QuakeML._as_float(
-                originUncertainty.find(QuakeML._add_namespace(
+                origin_uncertainty.find(QuakeML._add_namespace(
                     'minHorizontalUncertainty')).findtext(
                         QuakeML._add_namespace('value')))
             catalog.iloc[i].maxHorizontalUncertainty = QuakeML._as_float(
-                originUncertainty.find(QuakeML._add_namespace(
+                origin_uncertainty.find(QuakeML._add_namespace(
                     'maxHorizontalUncertainty')).findtext(
                         QuakeML._add_namespace('value')))
             catalog.iloc[i].horizontalUncertainty = QuakeML._as_float(
-                originUncertainty.find(QuakeML._add_namespace(
+                origin_uncertainty.find(QuakeML._add_namespace(
                     'azimuthMaxHorizontalUncertainty')).findtext(
                         QuakeML._add_namespace('value')))
 
             # plane
-            nodalPlanes = event.find(
+            nodal_planes = event.find(
                 QuakeML._add_namespace('focalMechanism')).find(
                     QuakeML._add_namespace('nodalPlanes'))
-            preferredPlane = nodalPlanes.get('preferredPlane')
-            preferredPlane = nodalPlanes.find(QuakeML._add_namespace(
-                'nodalPlane' + preferredPlane))
+            preferred_plane = nodal_planes.get('preferredPlane')
+            preferred_plane = nodal_planes.find(QuakeML._add_namespace(
+                'nodalPlane' + preferred_plane))
             # GET uncertain child!!
             strike, strike_uncertainty = QuakeML._get_uncertain_child(
-                preferredPlane, QuakeML._add_namespace('strike'))
+                preferred_plane, QuakeML._add_namespace('strike'))
 
             catalog.iloc[i].strike = strike
             catalog.iloc[i].strikeUncertainty = strike_uncertainty
 
             dip, dip_uncertainty = QuakeML._get_uncertain_child(
-                preferredPlane, QuakeML._add_namespace('dip'))
+                preferred_plane, QuakeML._add_namespace('dip'))
 
             catalog.iloc[i].dip = dip
             catalog.iloc[i].dipUncertainty = dip_uncertainty
 
             rake, rake_uncertainty = QuakeML._get_uncertain_child(
-                preferredPlane, QuakeML._add_namespace('rake'))
+                preferred_plane, QuakeML._add_namespace('rake'))
 
             catalog.iloc[i].rake = rake
             catalog.iloc[i].rake_uncertainty = rake_uncertainty
@@ -197,15 +203,15 @@ class QuakeML():
             if i < 5
             else float(v)
             for i, v in enumerate(
-                    [
-                        int(d)
-                        for d
-                        in date.split('-')
-                    ] + [
-                        float(t)
-                        for t
-                        in time[:-1].split(':')
-                    ]
+                [
+                    int(d)
+                    for d
+                    in date.split('-')
+                ] + [
+                    float(t)
+                    for t
+                    in time[:-1].split(':')
+                ]
             )
         ]
 
@@ -219,7 +225,18 @@ class QuakeML():
             return math.nan
 
     @classmethod
+    def from_string(cls, xml_string):
+        '''
+        Reads the content from an xml string.
+        '''
+        xml = le.fromstring(xml_string)
+        return cls(xml)
+
+    @classmethod
     def from_xml(cls, xml):
+        '''
+        Reads the content from the xml data structure.
+        '''
         return cls(xml)
 
 
