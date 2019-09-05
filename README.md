@@ -17,8 +17,8 @@ This is a python3 project. It is tested with Python 3.6.8 and with an virtual en
 To download the necessary python packages you can use the requirements.txt file.
 
 ```shell
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv wps-pipeline-notebook
+source wps-pipeline-notebook/bin/activate
 pip3 install -r requirements.txt
 ```
 
@@ -40,5 +40,4 @@ jupyter notebook
 
 ## Known issues
 
-There is an error on importing basemap from within the jupyter notebook.
-But once the code runs inside of a python3 console, the import works.
+There are no No known issues :-)
