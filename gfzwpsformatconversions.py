@@ -11,14 +11,19 @@ A log of this code comes from here:
 https://raw.githubusercontent.com/gfzriesgos/quakeledger/master/quakeml.py
 '''
 
+import collections
 import math
+import io
+import tokenize
 
-import lxml.etree as le
-import pandas as pd
 import geopandas as gpd
+import georasters as gr
+import lxml.etree as le
+import numpy as np
+import pandas as pd
 
 
-class QuakeMLNamespaceAdder():
+class QuakeMLNamespaceAdderMixin():
     '''
     A common Method for all those
     xml handlers that need the quakeml
@@ -31,8 +36,41 @@ class QuakeMLNamespaceAdder():
         '''
         return '{http://quakeml.org/xmlns/bed/1.2}' + element
 
+class UtcToEventMixin():
 
-class QuakeML(QuakeMLNamespaceAdder):
+    @staticmethod
+    def _utc2event(utc):
+        '''
+        Given utc string returns list with year,month,day,hour,minute,second
+        '''
+        # last part usually either Z(ulu) or UTC, if not fails
+        if utc[-3:] == 'UTC':
+            utc = utc[:-2]
+        elif utc[-1:] == 'Z':
+            pass
+        else:
+            raise Exception(
+                'Cannot handle timezone other than Z(ulu) or UTC: {}'.format(
+                    utc))
+        date, time = utc.split('T')
+        return [
+            int(v)
+            if i < 5
+            else float(v)
+            for i, v in enumerate(
+                [
+                    int(d)
+                    for d
+                    in date.split('-')
+                ] + [
+                    float(t)
+                    for t
+                    in time[:-1].split(':')
+                ]
+            )
+        ]
+
+class QuakeML(QuakeMLNamespaceAdderMixin, UtcToEventMixin):
     '''
     Class for handling quakeml data conversion.
     '''
@@ -207,37 +245,6 @@ class QuakeML(QuakeMLNamespaceAdder):
 
         return catalog
 
-    @staticmethod
-    def _utc2event(utc):
-        '''
-        Given utc string returns list with year,month,day,hour,minute,second
-        '''
-        # last part usually either Z(ulu) or UTC, if not fails
-        if utc[-3:] == 'UTC':
-            utc = utc[:-2]
-        elif utc[-1:] == 'Z':
-            pass
-        else:
-            raise Exception(
-                'Cannot handle timezone other than Z(ulu) or UTC: {}'.format(
-                    utc))
-        date, time = utc.split('T')
-        return [
-            int(v)
-            if i < 5
-            else float(v)
-            for i, v in enumerate(
-                [
-                    int(d)
-                    for d
-                    in date.split('-')
-                ] + [
-                    float(t)
-                    for t
-                    in time[:-1].split(':')
-                ]
-            )
-        ]
 
     @staticmethod
     def _as_float(possible_value):
@@ -264,7 +271,7 @@ class QuakeML(QuakeMLNamespaceAdder):
         return cls(xml)
 
 
-class QuakeMLDataframe(QuakeMLNamespaceAdder):
+class QuakeMLDataframe(QuakeMLNamespaceAdderMixin):
     '''
     Class to wrap the dataframe
     with quakeml data
@@ -533,3 +540,131 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
             int(date.minute),
             date.second
         )
+
+
+class Shakemap(UtcToEventMixin):
+    def __init__(self, shakeml, x_column='LON', y_column='LAT'):
+        self._shakeml = shakeml
+        self._x_column = x_column
+        self._y_column = y_column
+
+    @classmethod
+    def from_xml(cls, shakemap_xml):
+        return cls(shakemap_xml)
+
+    def to_intensity_geodataframe(self):
+        dataframe = self.to_intensity_dataframe()
+        geodataframe = gpd.GeoDataFrame(
+            dataframe,
+            geometry=gpd.points_from_xy(
+                dataframe[self._x_column],
+                dataframe[self._y_column]
+            )
+        )
+        return geodataframe
+
+    def to_intensity_dataframe(self):
+        '''
+        Converts the intensities to
+        a dataframe.
+        '''
+
+        shakeml = self._shakeml
+        nsmap = shakeml.nsmap
+
+        #columns
+        grid_fields = shakeml.findall('grid_field',namespaces = nsmap)
+
+        #indices (start at 1) & argsort them
+        column_idxs = [int(grid_field.attrib['index'])-1 for grid_field in grid_fields]
+        idxs_sorted = np.argsort(column_idxs)
+        column_names = [grid_field.attrib['name'] for grid_field in grid_fields]
+        columns = [column_names[idx] for idx in idxs_sorted]
+
+        grid_data = shakeml.find('grid_data',namespaces = nsmap)
+
+        data_dict = collections.defaultdict(list)
+        tokens = tokenize.tokenize(
+            io.BytesIO(
+                grid_data.text.encode('utf-8')
+            ).readline
+        )
+        index = 0
+        token_before = None
+        for token in tokens:
+            # 2 is number
+            if token.type == 2:
+                if index >= len(column_names):
+                    index = 0
+                name = column_names[index]
+                if name not in (self._x_column, self._y_column):
+                    name = 'value_' + name
+                value = float(token.string)
+                if token_before is not None and token_before.string == '-':
+                    value = -1 * value
+                data_dict[name].append(value)
+                index += 1
+            token_before = token
+
+        #get grid
+        grid_data = pd.DataFrame(data_dict)
+
+        #get units
+        for grid_field in grid_fields:
+            unit_name = grid_field.attrib['name']
+            unit_value = grid_field.attrib['units']
+            if unit_name not in (self._x_column, self._y_column):
+                grid_data['unit_' + unit_name] = unit_value
+        return grid_data
+
+    def to_intensity_raster(self, value_column):
+        dataframe = self.to_intensity_dataframe()
+        return Shakemap.dataframe2raster(
+            dataframe,
+            self._x_column,
+            self._y_column,
+            value_column,
+        )
+
+    @staticmethod
+    def dataframe2raster(dataframe, x_column, y_column, value_column):
+        # the following code works as long as the grid
+        # is regular
+        # it will not work if the grid is irregular
+        sorted_x_values = sorted(set(dataframe[x_column]))
+        sorted_y_values = sorted(set(dataframe[y_column]))
+
+        x_cell_size = np.mean(np.diff(sorted_x_values))
+        y_cell_size = np.mean(np.diff(sorted_y_values))
+
+        map_x_values = {}
+        for index, x_value in enumerate(sorted_x_values):
+            map_x_values[x_value] = index
+        map_y_values = {}
+        for index, y_value in enumerate(sorted_y_values):
+            map_y_values[y_value] = index
+
+        intermediate_dataframe = pd.DataFrame({
+            'value': dataframe[value_column]
+        })
+
+        intermediate_dataframe['x'] = dataframe[x_column].apply(lambda x: map_x_values[x])
+        intermediate_dataframe['y'] = dataframe[y_column].apply(lambda y: map_y_values[y])
+
+        raster = gr.from_pandas(intermediate_dataframe, value='value', x='x', y='y')
+        raster.bounds = (
+            dataframe[x_column].min(),
+            dataframe[y_column].min(),
+            dataframe[x_column].max(),
+            dataframe[y_column].max()
+        )
+        raster.x_cell_size = x_cell_size
+        raster.y_cell_size = y_cell_size
+        # TODO
+        # check if this handling is enough
+        # to make this work for the raster conversion
+        return raster
+
+
+
+
