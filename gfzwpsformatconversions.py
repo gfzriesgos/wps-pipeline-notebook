@@ -265,11 +265,19 @@ class QuakeML(QuakeMLNamespaceAdder):
 
 
 class QuakeMLDataframe(QuakeMLNamespaceAdder):
+    '''
+    Class to wrap the dataframe
+    with quakeml data
+    for conversions to xml.
+    '''
     def __init__(self, dataframe):
         self._dataframe = dataframe
 
     @classmethod
     def from_dataframe(cls, dataframe):
+        '''
+        Reads the content from a dataframe.
+        '''
         return cls(dataframe)
 
     def to_xml_string(self):
@@ -300,18 +308,18 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
                         str(quake.eventID))
                 }
             )
-            preferredOriginID = le.SubElement(
+            preferred_origin_id = le.SubElement(
                 event,
                 add_namespace('preferredOriginID')
             )
-            preferredOriginID.text = QuakeMLDataframe._add_id_prefix(
+            preferred_origin_id.text = QuakeMLDataframe._add_id_prefix(
                 str(quake.eventID)
             )
-            preferredMagnitudeID = le.SubElement(
+            preferred_magnitude_id = le.SubElement(
                 event,
                 add_namespace('preferredMagnitudeID')
             )
-            preferredMagnitudeID.text = QuakeMLDataframe._add_id_prefix(
+            preferred_magnitude_id.text = QuakeMLDataframe._add_id_prefix(
                 str(quake.eventID)
             )
             qtype = le.SubElement(event, add_namespace('type'))
@@ -361,40 +369,45 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
                     quake.depthUncertainty
                 )
             )
-            creationInfo = le.SubElement(origin, add_namespace('creationInfo'))
-            author = le.SubElement(creationInfo, add_namespace('author'))
+            creation_info = le.SubElement(
+                origin,
+                add_namespace('creationInfo')
+            )
+            author = le.SubElement(creation_info, add_namespace('author'))
             author.text = quake.agency
             # originUncertainty
-            originUncertainty = le.SubElement(
+            origin_uncertainty = le.SubElement(
                 origin,
                 add_namespace('originUncertainty')
             )
-            horizontalUncertainty = le.SubElement(
-                originUncertainty,
+            horizontal_uncertainty = le.SubElement(
+                origin_uncertainty,
                 add_namespace('horizontalUncertainty')
             )
-            horizontalUncertainty.text = QuakeMLDataframe._format_xsdouble(
+            horizontal_uncertainty.text = QuakeMLDataframe._format_xsdouble(
                 quake.horizontalUncertainty
             )
-            minHorizontalUncertainty = le.SubElement(
-                originUncertainty,
+            min_horizontal_uncertainty = le.SubElement(
+                origin_uncertainty,
                 add_namespace('minHorizontalUncertainty')
             )
-            minHorizontalUncertainty.text = QuakeMLDataframe._format_xsdouble(
-                quake.minHorizontalUncertainty
-            )
-            maxHorizontalUncertainty = le.SubElement(
-                originUncertainty,
+            min_horizontal_uncertainty.text = \
+                QuakeMLDataframe._format_xsdouble(
+                    quake.minHorizontalUncertainty
+                )
+            max_horizontal_uncertainty = le.SubElement(
+                origin_uncertainty,
                 add_namespace('maxHorizontalUncertainty')
             )
-            maxHorizontalUncertainty.text = QuakeMLDataframe._format_xsdouble(
-                quake.maxHorizontalUncertainty
-            )
-            azimuthMaxHorizontalUncertainty = le.SubElement(
-                originUncertainty,
+            max_horizontal_uncertainty.text = \
+                QuakeMLDataframe._format_xsdouble(
+                    quake.maxHorizontalUncertainty
+                )
+            azimuth_max_horizontal_uncertainty = le.SubElement(
+                origin_uncertainty,
                 add_namespace('azimuthMaxHorizontalUncertainty')
             )
-            azimuthMaxHorizontalUncertainty.text = \
+            azimuth_max_horizontal_uncertainty.text = \
                 QuakeMLDataframe._format_xsdouble(
                     quake.azimuthMaxHorizontalUncertainty
                 )
@@ -418,14 +431,14 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
             )
             mtype = le.SubElement(magnitude, add_namespace('type'))
             mtype.text = 'MW'
-            creationInfo = le.SubElement(
+            creation_info = le.SubElement(
                 magnitude,
                 add_namespace('creationInfo')
             )
-            author = le.SubElement(creationInfo, add_namespace('author'))
+            author = le.SubElement(creation_info, add_namespace('author'))
             author.text = quake.agency
             # plane (write only fault plane not auxilliary)
-            focalMechanism = le.SubElement(
+            focal_mechanism = le.SubElement(
                 event,
                 add_namespace('focalMechanism'),
                 {
@@ -434,35 +447,35 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
                     )
                 }
             )
-            nodalPlanes = le.SubElement(
-                focalMechanism,
+            nodal_planes = le.SubElement(
+                focal_mechanism,
                 add_namespace('nodalPlanes'),
                 {
                     'preferredPlane': '1'
                 }
             )
-            nodalPlane1 = le.SubElement(
-                nodalPlanes,
+            nodal_plane1 = le.SubElement(
+                nodal_planes,
                 add_namespace('nodalPlane1')
             )
-            nodalPlane1 = QuakeMLDataframe._add_uncertain_child(
-                nodalPlane1,
+            nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
+                nodal_plane1,
                 childname='strike',
                 value=str(quake.strike),
                 uncertainty=QuakeMLDataframe._format_xsdouble(
                     quake.strikeUncertainty
                 )
             )
-            nodalPlane1 = QuakeMLDataframe._add_uncertain_child(
-                nodalPlane1,
+            nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
+                nodal_plane1,
                 childname='dip',
                 value=str(quake.dip),
                 uncertainty=QuakeMLDataframe._format_xsdouble(
                     quake.dipUncertainty
                 )
             )
-            nodalPlane1 = QuakeMLDataframe._add_uncertain_child(
-                nodalPlane1,
+            nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
+                nodal_plane1,
                 childname='rake',
                 value=str(quake.rake),
                 uncertainty=QuakeMLDataframe._format_xsdouble(
@@ -479,10 +492,10 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
         '''
         add_namespace = QuakeMLDataframe._add_namespace
         child = le.SubElement(parent, add_namespace(childname))
-        v = le.SubElement(child, add_namespace('value'))
-        v.text = str(value)
-        u = le.SubElement(child, add_namespace('uncertainty'))
-        u.text = str(uncertainty)
+        val = le.SubElement(child, add_namespace('value'))
+        val.text = str(value)
+        unc = le.SubElement(child, add_namespace('uncertainty'))
+        unc.text = str(uncertainty)
         return parent
 
     @staticmethod
@@ -490,10 +503,10 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
         '''
         Adds an id prefix if necessary.
         '''
-        ID_PREFIX = 'quakeml:quakeledger/'
-        if element.startswith(ID_PREFIX):
+        id_prefix = 'quakeml:quakeledger/'
+        if element.startswith(id_prefix):
             return element
-        return ID_PREFIX + element
+        return id_prefix + element
 
     @staticmethod
     def _format_xsdouble(value):
@@ -511,12 +524,12 @@ class QuakeMLDataframe(QuakeMLNamespaceAdder):
         '''
         given event returns UTC string
         '''
-        d = event.fillna(0)
+        date = event.fillna(0)
         return '{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:09f}Z'.format(
-            int(d.year),
-            int(max(d.month, 1)),
-            int(max(d.day, 1)),
-            int(d.hour),
-            int(d.minute),
-            d.second
+            int(date.year),
+            int(max(date.month, 1)),
+            int(max(date.day, 1)),
+            int(date.hour),
+            int(date.minute),
+            date.second
         )

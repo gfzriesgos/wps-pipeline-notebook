@@ -775,6 +775,10 @@ def test_quakeml2df():
 
 
 def test_quakemldf2xml():
+    '''
+    Tests the conversion from a quakeml dataframe
+    back to xml.
+    '''
     dataframe = pd.DataFrame({
         'eventID': [
             'quakeml:quakeledger/CHOA_122',
@@ -819,128 +823,127 @@ def test_quakemldf2xml():
 
     assert len(xml) == 2
 
-    ns = 'http://quakeml.org/xmlns/bed/1.2'
+    xmlns = 'http://quakeml.org/xmlns/bed/1.2'
 
     first_one = xml[0]
     assert first_one.get('publicID') == 'quakeml:quakeledger/CHOA_122'
     assert first_one.find(
-        '{' + ns + '}preferredOriginID'
+        '{' + xmlns + '}preferredOriginID'
     ).text == 'quakeml:quakeledger/CHOA_122'
     assert first_one.find(
-        '{' + ns + '}preferredMagnitudeID'
+        '{' + xmlns + '}preferredMagnitudeID'
     ).text == 'quakeml:quakeledger/CHOA_122'
-    assert first_one.find('{' + ns + '}type').text == 'earthquake'
+    assert first_one.find('{' + xmlns + '}type').text == 'earthquake'
     assert first_one.find(
-        '{' + ns + '}description'
-    ).find('{' + ns + '}text').text == 'expert'
+        '{' + xmlns + '}description'
+    ).find('{' + xmlns + '}text').text == 'expert'
 
-    first_origin = first_one.find('{' + ns + '}origin')
+    first_origin = first_one.find('{' + xmlns + '}origin')
 
     assert first_origin.get('publicID') == 'quakeml:quakeledger/CHOA_122'
     assert first_origin.find(
-        '{' + ns + '}time'
+        '{' + xmlns + '}time'
     ).find(
-        '{' + ns + '}value'
+        '{' + xmlns + '}value'
     ).text == '2018-01-02T03:04:05.000000Z'
     assert first_origin.find(
-        '{' + ns + '}time'
+        '{' + xmlns + '}time'
     ).find(
-        '{' + ns + '}uncertainty'
+        '{' + xmlns + '}uncertainty'
     ).text == 'NaN'
     assert first_origin.find(
-        '{' + ns + '}latitude'
-    ).find('{' + ns + '}value').text == '-28.6384'
+        '{' + xmlns + '}latitude'
+    ).find('{' + xmlns + '}value').text == '-28.6384'
     assert first_origin.find(
-        '{' + ns + '}latitude'
-    ).find('{' + ns + '}uncertainty').text == 'NaN'
+        '{' + xmlns + '}latitude'
+    ).find('{' + xmlns + '}uncertainty').text == 'NaN'
     assert first_origin.find(
-        '{' + ns + '}longitude'
-    ).find('{' + ns + '}value').text == '-71.2736'
+        '{' + xmlns + '}longitude'
+    ).find('{' + xmlns + '}value').text == '-71.2736'
     assert first_origin.find(
-        '{' + ns + '}longitude'
-    ).find('{' + ns + '}uncertainty').text == 'NaN'
+        '{' + xmlns + '}longitude'
+    ).find('{' + xmlns + '}uncertainty').text == 'NaN'
     assert first_origin.find(
-        '{' + ns + '}depth'
-    ).find('{' + ns + '}value').text == '43'
+        '{' + xmlns + '}depth'
+    ).find('{' + xmlns + '}value').text == '43'
     assert first_origin.find(
-        '{' + ns + '}depth'
-    ).find('{' + ns + '}uncertainty').text == 'NaN'
+        '{' + xmlns + '}depth'
+    ).find('{' + xmlns + '}uncertainty').text == 'NaN'
 
     first_origin_uncertainty = first_origin.find(
-        '{' + ns + '}originUncertainty'
+        '{' + xmlns + '}originUncertainty'
     )
 
     assert first_origin_uncertainty.find(
-        '{' + ns + '}horizontalUncertainty'
+        '{' + xmlns + '}horizontalUncertainty'
     ).text == 'NaN'
     assert first_origin_uncertainty.find(
-        '{' + ns + '}minHorizontalUncertainty'
+        '{' + xmlns + '}minHorizontalUncertainty'
     ).text == 'NaN'
     assert first_origin_uncertainty.find(
-        '{' + ns + '}maxHorizontalUncertainty'
+        '{' + xmlns + '}maxHorizontalUncertainty'
     ).text == 'NaN'
     assert first_origin_uncertainty.find(
-        '{' + ns + '}azimuthMaxHorizontalUncertainty'
+        '{' + xmlns + '}azimuthMaxHorizontalUncertainty'
     ).text == 'NaN'
 
-    first_magnitude = first_one.find('{' + ns + '}magnitude')
+    first_magnitude = first_one.find('{' + xmlns + '}magnitude')
 
     assert first_magnitude.get('publicID') == 'quakeml:quakeledger/CHOA_122'
     assert first_magnitude.find(
-        '{' + ns + '}mag'
-    ).find('{' + ns + '}value').text == '9'
+        '{' + xmlns + '}mag'
+    ).find('{' + xmlns + '}value').text == '9'
     assert first_magnitude.find(
-        '{' + ns + '}mag'
-    ).find('{' + ns + '}uncertainty').text == 'NaN'
+        '{' + xmlns + '}mag'
+    ).find('{' + xmlns + '}uncertainty').text == 'NaN'
     assert first_magnitude.find(
-        '{' + ns + '}type'
+        '{' + xmlns + '}type'
     ).text == 'MW'
     assert first_magnitude.find(
-        '{' + ns + '}creationInfo'
-    ).find('{' + ns + '}author').text == 'GFZ'
+        '{' + xmlns + '}creationInfo'
+    ).find('{' + xmlns + '}author').text == 'GFZ'
 
-    first_focal_mechanisms = first_one.find('{' + ns + '}focalMechanism')
+    first_focal_mechanisms = first_one.find('{' + xmlns + '}focalMechanism')
 
     assert first_focal_mechanisms.get(
         'publicID'
     ) == 'quakeml:quakeledger/CHOA_122'
 
     first_nodal_planes = first_focal_mechanisms.find(
-        '{' + ns + '}nodalPlanes'
+        '{' + xmlns + '}nodalPlanes'
     )
 
     assert first_nodal_planes.get('preferredPlane') == '1'
 
     first_nodal_plane1 = first_nodal_planes.find(
-        '{' + ns + '}nodalPlane1'
+        '{' + xmlns + '}nodalPlane1'
     )
 
     assert first_nodal_plane1.find(
-        '{' + ns + '}strike'
-    ).find('{' + ns + '}value').text == '9'
+        '{' + xmlns + '}strike'
+    ).find('{' + xmlns + '}value').text == '9'
     assert first_nodal_plane1.find(
-        '{' + ns + '}strike'
-    ).find('{' + ns + '}uncertainty').text == 'NaN'
+        '{' + xmlns + '}strike'
+    ).find('{' + xmlns + '}uncertainty').text == 'NaN'
     assert first_nodal_plane1.find(
-        '{' + ns + '}dip'
-    ).find('{' + ns + '}value').text == '18'
+        '{' + xmlns + '}dip'
+    ).find('{' + xmlns + '}value').text == '18'
     assert first_nodal_plane1.find(
-        '{' + ns + '}dip'
-    ).find('{' + ns + '}uncertainty').text == 'NaN'
+        '{' + xmlns + '}dip'
+    ).find('{' + xmlns + '}uncertainty').text == 'NaN'
     assert first_nodal_plane1.find(
-        '{' + ns + '}rake'
-    ).find('{' + ns + '}value').text == '90'
+        '{' + xmlns + '}rake'
+    ).find('{' + xmlns + '}value').text == '90'
     assert first_nodal_plane1.find(
-        '{' + ns + '}rake'
-    ).find('{' + ns + '}uncertainty').text == 'NaN'
+        '{' + xmlns + '}rake'
+    ).find('{' + xmlns + '}uncertainty').text == 'NaN'
 
     # and it should be possible to do the translation back to dataframe
 
     quakeml_instance = gfzwpsformatconversions.QuakeML.from_string(
         le.tostring(xml)
     )
-    recreated_dataframe = quakeml_instance.to_dataframe()
+    quakeml_instance.to_dataframe()
     # and again
     quakeml_instance = gfzwpsformatconversions.QuakeML.from_xml(xml)
-    recreated_dataframe = quakeml_instance.to_dataframe()
-    # recreated_dataframe = gfzwpsformatconversions.quakeml2geodf(xml)
+    quakeml_instance.to_dataframe()
