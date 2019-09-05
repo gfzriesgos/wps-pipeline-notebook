@@ -20,6 +20,7 @@ To download the necessary python packages you can use the requirements.txt file.
 python3 -m venv wps-pipeline-notebook
 source wps-pipeline-notebook/bin/activate
 pip3 install -r requirements.txt
+ipython3 kernel install --user --name=wps-pipeline-notebook
 ```
 
 It can be that you also have to install the basemap package yourself:
