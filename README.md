@@ -42,3 +42,17 @@ jupyter notebook
 ## Known issues
 
 There are no No known issues :-)
+:
+## Where does the code comes from?
+
+This repository strongly reuses code that was used in the libraries of the wps services themselves
+(most of them are implemented using python).
+
+So we reuse code from:
+- https://github.com/gfzriesgos/quakeledger
+
+However as we want to provide a library for the format conversions only (so that other people can use the 
+wps versions) we may remove the conversion code later from the repositories mentioned above (so that they use
+our conversion library instead).
+
+
