@@ -6,15 +6,33 @@ for format conversions
 of wps in- and output data
 in the riesgos project for
 services provided by the GFZ.
+
+A log of this code comes from here:
+https://raw.githubusercontent.com/gfzriesgos/quakeledger/master/quakeml.py
 '''
 
 import math
 
 import lxml.etree as le
 import pandas as pd
+import geopandas as gpd
 
 
-class QuakeML():
+class QuakeMLNamespaceAdder():
+    '''
+    A common Method for all those
+    xml handlers that need the quakeml
+    namespace.
+    '''
+    @staticmethod
+    def _add_namespace(element):
+        '''
+        Adds the namespace to the quakeml xml elements.
+        '''
+        return '{http://quakeml.org/xmlns/bed/1.2}' + element
+
+
+class QuakeML(QuakeMLNamespaceAdder):
     '''
     Class for handling quakeml data conversion.
     '''
@@ -34,12 +52,16 @@ class QuakeML():
                 QuakeML._add_namespace('uncertainty')))
         return [value, uncertainty]
 
-    @staticmethod
-    def _add_namespace(element):
-        '''
-        Adds the namespace to the quakeml xml elements.
-        '''
-        return '{http://quakeml.org/xmlns/bed/1.2}' + element
+
+    def to_geodataframe(self):
+        dataframe = self.to_dataframe()
+        geodataframe = gpd.GeoDataFrame(
+            dataframe,
+            geometry=gpd.points_from_xy(
+                dataframe['longitude'],
+                dataframe['latitude'])
+        )
+        return geodataframe
 
     def to_dataframe(self):
         '''
@@ -240,12 +262,121 @@ class QuakeML():
         return cls(xml)
 
 
-# the skeleton of the code is from here:
-# https://raw.githubusercontent.com/gfzriesgos/quakeledger/master/quakeml.py
-# (the code there may be replaced by using this file later)
-def quakeml2df(quakeml_xml):
-    '''
-    Transforms the xml of a quakeml file to a data frame.
-    '''
-    quakeml = QuakeML.from_xml(quakeml_xml)
-    return quakeml.to_dataframe()
+
+class QuakeMLDataframe(QuakeMLNamespaceAdder):
+    def __init__(self, dataframe):
+        self._dataframe = dataframe
+
+    @classmethod
+    def from_dataframe(cls, dataframe):
+        return cls(dataframe)
+
+    def to_xml_string(self):
+        '''
+        Converts the dataframe to xml and gives the xml text back.
+        '''
+        xml = self.to_xml()
+        return le.tostring(xml, pretty_print=True, encoding='unicode')
+
+    def to_xml(self):
+        '''
+        Given a pandas dataframe with events returns QuakeML version of
+        the catalog
+        '''
+        add_namespace = QuakeMLDataframe._add_namespace
+        quakeml = le.Element(add_namespace('eventParameters'), publicID=QuakeMLDataframe._add_id_prefix('0'))
+        # go through all events
+        for i in range(len(self._dataframe)):
+            quake = self._dataframe.iloc[i]
+            event = le.SubElement(quakeml, add_namespace('event'),
+                                {'publicID': QuakeMLDataframe._add_id_prefix(str(quake.eventID))})
+            preferredOriginID = le.SubElement(event, add_namespace('preferredOriginID'))
+            preferredOriginID.text = QuakeMLDataframe._add_id_prefix(str(quake.eventID))
+            preferredMagnitudeID = le.SubElement(event, add_namespace('preferredMagnitudeID'))
+            preferredMagnitudeID.text = QuakeMLDataframe._add_id_prefix(str(quake.eventID))
+            qtype = le.SubElement(event, add_namespace('type'))
+            qtype.text = 'earthquake'
+            description = le.SubElement(event, add_namespace('description'))
+            text = le.SubElement(description, add_namespace('text'))
+            text.text = str(quake.type)
+            # origin
+            origin = le.SubElement(event, add_namespace('origin'), {'publicID': QuakeMLDataframe._add_id_prefix(str(quake.eventID))})
+            origin = QuakeMLDataframe._add_uncertain_child(origin, childname='time', value=QuakeMLDataframe._event2utc(quake), uncertainty=QuakeMLDataframe._format_xsdouble(quake.timeUncertainty))
+            origin = QuakeMLDataframe._add_uncertain_child(origin, childname='latitude', value=str(quake.latitude), uncertainty=QuakeMLDataframe._format_xsdouble(quake.latitudeUncertainty))
+            origin = QuakeMLDataframe._add_uncertain_child(origin, childname='longitude', value=str(quake.longitude), uncertainty=QuakeMLDataframe._format_xsdouble(quake.longitudeUncertainty))
+            origin = QuakeMLDataframe._add_uncertain_child(origin, childname='depth', value=str(quake.depth), uncertainty=QuakeMLDataframe._format_xsdouble(quake.depthUncertainty))
+            creationInfo = le.SubElement(origin, add_namespace('creationInfo'))
+            author = le.SubElement(creationInfo, add_namespace('author'))
+            author.text = quake.agency
+            # originUncertainty
+            originUncertainty = le.SubElement(origin, add_namespace('originUncertainty'))
+            # NOTE: imo this should be decided during processing and not on data level --> NOT included
+            # preferredDescription = le.SubElement(originUncertainty, 'originUncertainty')
+            # preferredDescription.text = quake.preferredOriginUncertainty
+            horizontalUncertainty = le.SubElement(originUncertainty, add_namespace('horizontalUncertainty'))
+            horizontalUncertainty.text = QuakeMLDataframe._format_xsdouble(quake.horizontalUncertainty)
+            minHorizontalUncertainty = le.SubElement(originUncertainty, add_namespace('minHorizontalUncertainty'))
+            minHorizontalUncertainty.text = QuakeMLDataframe._format_xsdouble(quake.minHorizontalUncertainty)
+            maxHorizontalUncertainty = le.SubElement(originUncertainty, add_namespace('maxHorizontalUncertainty'))
+            maxHorizontalUncertainty.text = QuakeMLDataframe._format_xsdouble(quake.maxHorizontalUncertainty)
+            azimuthMaxHorizontalUncertainty = le.SubElement(originUncertainty, add_namespace('azimuthMaxHorizontalUncertainty'))
+            azimuthMaxHorizontalUncertainty.text = QuakeMLDataframe._format_xsdouble(quake.azimuthMaxHorizontalUncertainty)
+            # magnitude
+            magnitude = le.SubElement(event, add_namespace('magnitude'), {'publicID': QuakeMLDataframe._add_id_prefix(str(quake.eventID))})
+            magnitude = QuakeMLDataframe._add_uncertain_child(magnitude, childname='mag', value=str(quake.magnitude), uncertainty=QuakeMLDataframe._format_xsdouble(quake.magnitudeUncertainty))
+            mtype = le.SubElement(magnitude, add_namespace('type'))
+            mtype.text = 'MW'
+            creationInfo = le.SubElement(magnitude, add_namespace('creationInfo'))
+            author = le.SubElement(creationInfo, add_namespace('author'))
+            author.text = quake.agency
+            # plane (write only fault plane not auxilliary)
+            focalMechanism = le.SubElement(event, add_namespace('focalMechanism'), {'publicID': QuakeMLDataframe._add_id_prefix(str(quake.eventID))})
+            nodalPlanes = le.SubElement(focalMechanism, add_namespace('nodalPlanes'), {'preferredPlane': '1'})
+            nodalPlane1 = le.SubElement(nodalPlanes, add_namespace('nodalPlane1'))
+            nodalPlane1 = QuakeMLDataframe._add_uncertain_child(nodalPlane1, childname='strike', value=str(quake.strike), uncertainty=QuakeMLDataframe._format_xsdouble(quake.strikeUncertainty))
+            nodalPlane1 = QuakeMLDataframe._add_uncertain_child(nodalPlane1, childname='dip', value=str(quake.dip), uncertainty=QuakeMLDataframe._format_xsdouble(quake.dipUncertainty))
+            nodalPlane1 = QuakeMLDataframe._add_uncertain_child(nodalPlane1, childname='rake', value=str(quake.rake), uncertainty=QuakeMLDataframe._format_xsdouble(quake.rakeUncertainty))
+
+        return quakeml
+
+    @staticmethod
+    def _add_uncertain_child(parent, childname, value, uncertainty):
+        '''
+        Adds an uncertain child with value/uncertainty pair
+        '''
+        add_namespace = QuakeMLDataframe._add_namespace
+        child = le.SubElement(parent, add_namespace(childname))
+        v = le.SubElement(child, add_namespace('value'))
+        v.text = str(value)
+        u = le.SubElement(child, add_namespace('uncertainty'))
+        u.text = str(uncertainty)
+        return parent
+
+    @staticmethod
+    def _add_id_prefix(element):
+        '''
+        Adds an id prefix if necessary.
+        '''
+        ID_PREFIX = 'quakeml:quakeledger/'
+        if element.startswith(ID_PREFIX):
+            return element
+        return ID_PREFIX + element
+
+    @staticmethod
+    def _format_xsdouble(value):
+        '''
+        Converts the value for a xsdouble field
+        to a number or NaN.
+        '''
+        if value is None or math.isnan(value):
+            return 'NaN'
+
+        return str(value)
+
+    @staticmethod
+    def _event2utc(event):
+        '''
+        given event returns UTC string
+        '''
+        d=event.fillna(0)
+        return '{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:09f}Z'.format(int(d.year), int(max(d.month, 1)), int(max(d.day, 1)), int(d.hour), int(d.minute), d.second)

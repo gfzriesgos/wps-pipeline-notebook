@@ -11,6 +11,7 @@ To run the tests use pytest.
 import math
 
 import lxml.etree as le
+import pandas as pd
 
 import gfzwpsformatconversions
 
@@ -735,7 +736,7 @@ def test_quakeml2df():
     '''
 
     xml = le.fromstring(raw_xml)
-    dataframe = gfzwpsformatconversions.quakeml2df(xml)
+    dataframe = gfzwpsformatconversions.QuakeML.from_xml(xml).to_geodataframe()
 
     assert len(dataframe) == 12
 
@@ -766,3 +767,112 @@ def test_quakeml2df():
     assert math.isnan(first_one['dipUncertainty'])
     assert 89.9 < first_one['rake'] < 90.1
     assert math.isnan(first_one['rakeUncertainty'])
+
+    assert 'geometry' in dataframe.keys()
+
+    assert -71.62 < first_one['geometry'].x < -71.6
+    assert -29.99 < first_one['geometry'].y < 29.98
+
+def test_quakemldf2xml():
+    dataframe = pd.DataFrame({
+        'eventID': ['quakeml:quakeledger/CHOA_122', 'quakeml:quakeledger/CHOA_123'],
+        'agency': ['GFZ', 'GFZ'],
+        'Identifier': [math.nan, math.nan],
+        'year': [2018, 2018],
+        'month': [1, 1],
+        'day': [2, 1],
+        'hour': [3, 0],
+        'minute': [4, 0],
+        'second': [5, 0],
+        'timeUncertainty': [math.nan, math.nan],
+        'longitude': [-71.2736, -71.3583],
+        'longitudeUncertainty': [math.nan, math.nan],
+        'latitude': [-28.6384, -29.082],
+        'latitudeUncertainty': [math.nan, math.nan],
+        'horizontalUncertainty': [math.nan, math.nan],
+        'maxHorizontalUncertainty': [math.nan, math.nan],
+        'minHorizontalUncertainty': [math.nan, math.nan],
+        'azimuthMaxHorizontalUncertainty': [math.nan, math.nan],
+        'depth': [43, 43],
+        'depthUncertainty': [math.nan, math.nan],
+        'magnitude': [9, 9],
+        'magnitudeUncertainty': [math.nan, math.nan],
+        'rake': [90, 90],
+        'rakeUncertainty': [math.nan, math.nan],
+        'dip': [18, 18],
+        'dipUncertainty': [math.nan, math.nan],
+        'strike': [9, 9],
+        'strikeUncertainty': [math.nan, math.nan],
+        'type': ['expert', 'expert'],
+        'probability': [math.nan, math.nan],
+    })
+
+    assert len(dataframe) == 2
+
+    xml = gfzwpsformatconversions.QuakeMLDataframe.from_dataframe(dataframe).to_xml()
+
+    assert len(xml) == 2
+
+    ns = 'http://quakeml.org/xmlns/bed/1.2'
+
+    first_one = xml[0]
+    assert first_one.get('publicID') == 'quakeml:quakeledger/CHOA_122'
+    assert first_one.find('{' + ns + '}preferredOriginID').text == 'quakeml:quakeledger/CHOA_122'
+    assert first_one.find('{' + ns + '}preferredMagnitudeID').text == 'quakeml:quakeledger/CHOA_122'
+    assert first_one.find('{' + ns + '}type').text == 'earthquake'
+    assert first_one.find('{' + ns + '}description').find('{' + ns + '}text').text == 'expert'
+
+    first_origin = first_one.find('{' + ns + '}origin')
+
+    assert first_origin.get('publicID') == 'quakeml:quakeledger/CHOA_122'
+    assert first_origin.find('{' + ns + '}time').find('{' + ns + '}value').text == '2018-01-02T03:04:05.000000Z'
+    assert first_origin.find('{' + ns + '}time').find('{' + ns + '}uncertainty').text == 'NaN'
+    assert first_origin.find('{' + ns + '}latitude').find('{' + ns + '}value').text == '-28.6384'
+    assert first_origin.find('{' + ns + '}latitude').find('{' + ns + '}uncertainty').text == 'NaN'
+    assert first_origin.find('{' + ns + '}longitude').find('{' + ns + '}value').text == '-71.2736'
+    assert first_origin.find('{' + ns + '}longitude').find('{' + ns + '}uncertainty').text == 'NaN'
+    assert first_origin.find('{' + ns + '}depth').find('{' + ns + '}value').text == '43'
+    assert first_origin.find('{' + ns + '}depth').find('{' + ns + '}uncertainty').text == 'NaN'
+
+    first_origin_uncertainty = first_origin.find('{' + ns + '}originUncertainty')
+
+    assert first_origin_uncertainty.find('{' + ns + '}horizontalUncertainty').text == 'NaN'
+    assert first_origin_uncertainty.find('{' + ns + '}minHorizontalUncertainty').text == 'NaN'
+    assert first_origin_uncertainty.find('{' + ns + '}maxHorizontalUncertainty').text == 'NaN'
+    assert first_origin_uncertainty.find('{' + ns + '}azimuthMaxHorizontalUncertainty').text == 'NaN'
+
+    first_magnitude = first_one.find('{' + ns + '}magnitude')
+
+    assert first_magnitude.get('publicID') == 'quakeml:quakeledger/CHOA_122'
+    assert first_magnitude.find('{' + ns + '}mag').find('{' + ns + '}value').text == '9'
+    assert first_magnitude.find('{' + ns + '}mag').find('{' + ns + '}uncertainty').text == 'NaN'
+    assert first_magnitude.find('{' + ns + '}type').text == 'MW'
+    assert first_magnitude.find('{' + ns + '}creationInfo').find('{' + ns + '}author').text == 'GFZ'
+
+    first_focal_mechanisms = first_one.find('{' + ns + '}focalMechanism')
+
+    assert first_focal_mechanisms.get('publicID') == 'quakeml:quakeledger/CHOA_122'
+
+    first_nodal_planes = first_focal_mechanisms.find('{' + ns + '}nodalPlanes')
+
+    assert first_nodal_planes.get('preferredPlane') == '1'
+
+    first_nodal_plane1 = first_nodal_planes.find('{' + ns + '}nodalPlane1')
+
+    assert first_nodal_plane1.find('{' + ns + '}strike').find('{' + ns + '}value').text == '9'
+    assert first_nodal_plane1.find('{' + ns + '}strike').find('{' + ns + '}uncertainty').text == 'NaN'
+    assert first_nodal_plane1.find('{' + ns + '}dip').find('{' + ns + '}value').text == '18'
+    assert first_nodal_plane1.find('{' + ns + '}dip').find('{' + ns + '}uncertainty').text == 'NaN'
+    assert first_nodal_plane1.find('{' + ns + '}rake').find('{' + ns + '}value').text == '90'
+    assert first_nodal_plane1.find('{' + ns + '}rake').find('{' + ns + '}uncertainty').text == 'NaN'
+
+
+
+    # and it should be possible to do the translation back to dataframe
+
+    quakeml_instance = gfzwpsformatconversions.QuakeML.from_string(le.tostring(xml))
+    recreated_dataframe = quakeml_instance.to_dataframe()
+    # and again
+    quakeml_instance = gfzwpsformatconversions.QuakeML.from_xml(xml)
+    recreated_dataframe = quakeml_instance.to_dataframe()
+    #recreated_dataframe = gfzwpsformatconversions.quakeml2geodf(xml)
