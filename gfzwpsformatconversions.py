@@ -655,6 +655,96 @@ class Shakemap():
         )
         return pd.DataFrame(data_dict)
 
+    def to_xml_string(self):
+        '''
+        Returns the xml as a string.
+        '''
+        xml = self.to_xml()
+        return le.tostring(xml, pretty_print=True, encoding='unicode')
+
+    def to_xml(self):
+        '''
+        Returns the data as xml structure.
+        '''
+        return self._shakeml
+
+    def to_event_geodataframe_or_none(self):
+        '''
+        Returns the event in a geodataframe
+        or returns None if there is no data about
+        the event.
+        '''
+        series = self.to_event_series_or_none()
+        if series is None:
+            return None
+        dataframe = pd.DataFrame([series])
+        geodataframe = gpd.GeoDataFrame(
+            dataframe,
+            geometry=gpd.points_from_xy(
+                dataframe['longitude'],
+                dataframe['latitude']
+            )
+        )
+        return geodataframe
+
+    def to_event_series_or_none(self):
+        '''
+        Returns a dataframe with the event
+        data.
+        '''
+        nsmap = self._shakeml.nsmap
+        event = self._shakeml.find('event', namespaces=nsmap)
+
+        if event is None:
+            return None
+
+        index = [i for i in range(max(1, len(event)))]
+        columns = [
+            'eventID',
+            'agency',
+            'Identifier',
+            'year',
+            'month',
+            'day',
+            'hour',
+            'minute',
+            'second',
+            'timeError',
+            'longitude',
+            'latitude',
+            'SemiMajor90',
+            'SemiMinor90',
+            'ErrorStrike',
+            'depth',
+            'depthError',
+            'magnitude',
+            'sigmaMagnitude',
+            'rake',
+            'dip',
+            'strike',
+            'type',
+            'probability',
+            'fuzzy',
+        ]
+        result_df = pd.DataFrame(index=index, columns=columns)
+        result_df['eventID'] = event.attrib['event_id']
+        result_df['agency'] = event.attrib['event_network']
+        year, month, day, hour, minute, second = \
+            _utc2event(event.attrib['event_timestamp'])
+        result_df['year'] = year
+        result_df['month'] = month
+        result_df['day'] = day
+        result_df['hour'] = hour
+        result_df['minute'] = minute
+        result_df['second'] = second
+        result_df['depth'] = float(event.attrib['depth'])
+        result_df['magnitude'] = float(event.attrib['magnitude'])
+        result_df['longitude'] = float(event.attrib['lon'])
+        result_df['latitude'] = float(event.attrib['lat'])
+        result_df['type'] = self._shakeml.attrib['shakemap_event_type']
+
+        return result_df.iloc[0]
+
     def to_intensity_dataframe(self):
         '''
         Converts the intensities to

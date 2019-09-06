@@ -41,8 +41,16 @@ jupyter notebook
 
 ## Known issues
 
-There are no No known issues :-)
-:
+The deus process doesn't work at the moment with the inputs from
+the other services.
+This has two reasons:
+- First the names in the assetmaster and modelprop outputs for
+  the taxonomies doesn't match. This is more a problem with those
+  services.
+- Second deus seems to have a problem with the given shakemap
+  from the notebook. We must spend more time to look up what
+  the reason for this behaviour is.
+
 ## Where does the code comes from?
 
 This repository strongly reuses code that was used in the libraries of the wps services themselves
@@ -50,6 +58,7 @@ This repository strongly reuses code that was used in the libraries of the wps s
 
 So we reuse code from:
 - https://github.com/gfzriesgos/quakeledger
+- https://github.com/gfzriesgos/shakyground
 
 However as we want to provide a library for the format conversions only (so that other people can use the 
 wps versions) we may remove the conversion code later from the repositories mentioned above (so that they use

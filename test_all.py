@@ -540,9 +540,8 @@ def test_shakemap2dataframe():
     '''
 
     xml = le.fromstring(raw_xml)
-    dataframe = gfzwpsformatconversions.Shakemap.from_xml(
-        xml
-    ).to_intensity_geodataframe()
+    shakemap = gfzwpsformatconversions.Shakemap.from_xml(xml)
+    dataframe = shakemap.to_intensity_geodataframe()
 
     assert len(dataframe) == 9
 
@@ -561,3 +560,29 @@ def test_shakemap2dataframe():
 
     assert 'unit_LON' not in first_one.keys()
     assert 'unit_LAT' not in first_one.keys()
+
+    first_event = shakemap.to_event_series_or_none()
+
+    assert first_event is not None
+
+    assert first_event['eventID'] == 'quakeml:quakeledger/CHOA_122'
+    assert first_event['agency'] == 'nan'
+    assert first_event['year'] == 2018
+    assert first_event['month'] == 1
+    assert first_event['day'] == 1
+    assert first_event['hour'] == 0
+    assert first_event['minute'] == 0
+    assert first_event['second'] == 0
+    assert 42.9 < first_event['depth'] < 43.1
+    assert -28.7 < first_event['latitude'] < -28.6
+    assert -71.3 < first_event['longitude'] < 71.2
+
+    assert first_event['type'] == 'expert'
+
+    event_geodataframe = shakemap.to_event_geodataframe_or_none()
+
+    assert event_geodataframe is not None
+
+    first_event_with_location = event_geodataframe.iloc[0]
+    assert -28.7 < first_event_with_location['geometry'].y < -28.6
+    assert -71.3 < first_event_with_location['geometry'].x < 71.2

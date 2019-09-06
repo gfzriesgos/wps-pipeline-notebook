@@ -9,6 +9,7 @@
 - Changed the name of the virtual environment and a readme text to register it.
 - Added a quakeml visualization.
 - Added the shakyground execution.
+- Added the deus execution and some testinputs to make it work.
 
 # 2019-09-04
 
