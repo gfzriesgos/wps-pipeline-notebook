@@ -1,3 +1,7 @@
+# 2019-09-06
+
+- Added the raster conversion for the shakemap intensities.
+
 # 2019-09-05
 
 - Added the conversion of quakeml xml data to a pandas dataframe.

@@ -22,55 +22,49 @@ import lxml.etree as le
 import numpy as np
 import pandas as pd
 
+from osgeo import osr
 
-class QuakeMLNamespaceAdderMixin():
+
+def _add_quakeml_namespace(element):
     '''
-    A common Method for all those
-    xml handlers that need the quakeml
-    namespace.
+    Adds the namespace to the quakeml xml elements.
     '''
-    @staticmethod
-    def _add_namespace(element):
-        '''
-        Adds the namespace to the quakeml xml elements.
-        '''
-        return '{http://quakeml.org/xmlns/bed/1.2}' + element
+    return '{http://quakeml.org/xmlns/bed/1.2}' + element
 
-class UtcToEventMixin():
 
-    @staticmethod
-    def _utc2event(utc):
-        '''
-        Given utc string returns list with year,month,day,hour,minute,second
-        '''
-        # last part usually either Z(ulu) or UTC, if not fails
-        if utc[-3:] == 'UTC':
-            utc = utc[:-2]
-        elif utc[-1:] == 'Z':
-            pass
-        else:
-            raise Exception(
-                'Cannot handle timezone other than Z(ulu) or UTC: {}'.format(
-                    utc))
-        date, time = utc.split('T')
-        return [
-            int(v)
-            if i < 5
-            else float(v)
-            for i, v in enumerate(
-                [
-                    int(d)
-                    for d
-                    in date.split('-')
-                ] + [
-                    float(t)
-                    for t
-                    in time[:-1].split(':')
-                ]
-            )
-        ]
+def _utc2event(utc):
+    '''
+    Given utc string returns list with year,month,day,hour,minute,second
+    '''
+    # last part usually either Z(ulu) or UTC, if not fails
+    if utc[-3:] == 'UTC':
+        utc = utc[:-2]
+    elif utc[-1:] == 'Z':
+        pass
+    else:
+        raise Exception(
+            'Cannot handle timezone other than Z(ulu) or UTC: {}'.format(
+                utc))
+    date, time = utc.split('T')
+    return [
+        int(v)
+        if i < 5
+        else float(v)
+        for i, v in enumerate(
+            [
+                int(d)
+                for d
+                in date.split('-')
+            ] + [
+                float(t)
+                for t
+                in time[:-1].split(':')
+            ]
+        )
+    ]
 
-class QuakeML(QuakeMLNamespaceAdderMixin, UtcToEventMixin):
+
+class QuakeML():
     '''
     Class for handling quakeml data conversion.
     '''
@@ -84,10 +78,10 @@ class QuakeML(QuakeMLNamespaceAdderMixin, UtcToEventMixin):
         '''
         value = QuakeML._as_float(
             parent.find(childname).findtext(
-                QuakeML._add_namespace('value')))
+                _add_quakeml_namespace('value')))
         uncertainty = QuakeML._as_float(
             parent.find(childname).findtext(
-                QuakeML._add_namespace('uncertainty')))
+                _add_quakeml_namespace('uncertainty')))
         return [value, uncertainty]
 
     def to_geodataframe(self):
@@ -102,6 +96,141 @@ class QuakeML(QuakeMLNamespaceAdderMixin, UtcToEventMixin):
                 dataframe['latitude'])
         )
         return geodataframe
+
+    @staticmethod
+    def _fill_series_from_origin_time(series, origin):
+        # time
+        year, month, day, hour, minute, second = _utc2event(
+            origin.find(_add_quakeml_namespace('time')).findtext(
+                _add_quakeml_namespace('value')))
+        series.year = year
+        series.month = month
+        series.day = day
+        series.hour = hour
+        series.minute = minute
+        series.second = second
+
+        series.timeUncertainty = float(origin.find(
+            _add_quakeml_namespace('time')).findtext(
+                _add_quakeml_namespace('uncertainty')))
+
+    @staticmethod
+    def _fill_series_from_origin(series, origin):
+        QuakeML._fill_series_from_origin_time(series, origin)
+        # latitude/longitude/depth
+        latitude, latitude_uncertainty = QuakeML._get_uncertain_child(
+            origin, _add_quakeml_namespace('latitude'))
+
+        series.latitude = latitude
+        series.latitudeUncertainty = latitude_uncertainty
+
+        longitude, longitude_uncertainty = QuakeML._get_uncertain_child(
+            origin, _add_quakeml_namespace('longitude'))
+
+        series.longitude = longitude
+        series.longitudeUncertainty = longitude_uncertainty
+
+        depth, depth_uncertainty = QuakeML._get_uncertain_child(
+            origin, _add_quakeml_namespace('depth'))
+
+        series.depth = depth
+        series.depthUncertainty = depth_uncertainty
+
+        # agency/provider
+        series.agency = origin.find(
+            _add_quakeml_namespace('creationInfo')).findtext(
+                _add_quakeml_namespace('author'))
+        QuakeML._fill_series_from_origin_uncertainty(
+            series,
+            origin.find(
+                _add_quakeml_namespace('originUncertainty')
+            )
+        )
+
+    @staticmethod
+    def _fill_series_from_origin_uncertainty(series, origin_uncertainty):
+        series.horizontalUncertainty = QuakeML._as_float(
+            origin_uncertainty.find(
+                _add_quakeml_namespace('horizontalUncertainty')).findtext(
+                    _add_quakeml_namespace('value')))
+        series.minHorizontalUncertainty = QuakeML._as_float(
+            origin_uncertainty.find(_add_quakeml_namespace(
+                'minHorizontalUncertainty')).findtext(
+                    _add_quakeml_namespace('value')))
+        series.maxHorizontalUncertainty = QuakeML._as_float(
+            origin_uncertainty.find(_add_quakeml_namespace(
+                'maxHorizontalUncertainty')).findtext(
+                    _add_quakeml_namespace('value')))
+        series.horizontalUncertainty = QuakeML._as_float(
+            origin_uncertainty.find(_add_quakeml_namespace(
+                'azimuthMaxHorizontalUncertainty')).findtext(
+                    _add_quakeml_namespace('value')))
+
+    @staticmethod
+    def _fill_series_from_magnitude(series, magnitude):
+        mag_value, mag_uncertainty = QuakeML._get_uncertain_child(
+            magnitude, _add_quakeml_namespace('mag'))
+
+        series.magnitude = mag_value
+        series.magnitudeUncertainty = mag_uncertainty
+
+    @staticmethod
+    def _fill_series_from_nodal_planes(series, nodal_planes):
+        preferred_plane = nodal_planes.get('preferredPlane')
+        preferred_plane = nodal_planes.find(_add_quakeml_namespace(
+            'nodalPlane' + preferred_plane))
+        # GET uncertain child!!
+        strike, strike_uncertainty = QuakeML._get_uncertain_child(
+            preferred_plane, _add_quakeml_namespace('strike'))
+
+        series.strike = strike
+        series.strikeUncertainty = strike_uncertainty
+
+        dip, dip_uncertainty = QuakeML._get_uncertain_child(
+            preferred_plane, _add_quakeml_namespace('dip'))
+
+        series.dip = dip
+        series.dipUncertainty = dip_uncertainty
+
+        rake, rake_uncertainty = QuakeML._get_uncertain_child(
+            preferred_plane, _add_quakeml_namespace('rake'))
+
+        series.rake = rake
+        series.rake_uncertainty = rake_uncertainty
+
+    @staticmethod
+    def _fill_series(series, event):
+        # get ID
+        series.eventID = event.attrib['publicID']
+        # type
+        series.type = event.find(
+            _add_quakeml_namespace('description')).findtext(
+                _add_quakeml_namespace('text'))
+
+        QuakeML._fill_series_from_origin(
+            series,
+            event.find(
+                _add_quakeml_namespace(
+                    'origin'
+                )
+            )
+        )
+        QuakeML._fill_series_from_magnitude(
+            series,
+            event.find(
+                _add_quakeml_namespace(
+                    'magnitude'
+                )
+            )
+        )
+        QuakeML._fill_series_from_nodal_planes(
+            series,
+            event.find(
+                _add_quakeml_namespace('focalMechanism')
+            ).find(
+                _add_quakeml_namespace('nodalPlanes')
+            )
+        )
 
     def to_dataframe(self):
         '''
@@ -144,107 +273,8 @@ class QuakeML(QuakeMLNamespaceAdderMixin, UtcToEventMixin):
         catalog = pd.DataFrame(index=index, columns=columns)
         # add individual events to catalog
         for i, event in enumerate(self._xml):
-            # get ID
-            catalog.iloc[i].eventID = event.attrib['publicID']
-            # type
-            catalog.iloc[i].type = event.find(
-                QuakeML._add_namespace('description')).findtext(
-                    QuakeML._add_namespace('text'))
-            # origin
-            origin = event.find(QuakeML._add_namespace('origin'))
-            # time
-            year, month, day, hour, minute, second = QuakeML._utc2event(
-                origin.find(QuakeML._add_namespace('time')).findtext(
-                    QuakeML._add_namespace('value')))
-            catalog.iloc[i].year = year
-            catalog.iloc[i].month = month
-            catalog.iloc[i].day = day
-            catalog.iloc[i].hour = hour
-            catalog.iloc[i].minute = minute
-            catalog.iloc[i].second = second
-
-            catalog.iloc[i].timeUncertainty = float(origin.find(
-                QuakeML._add_namespace('time')).findtext(
-                    QuakeML._add_namespace('uncertainty')))
-            # latitude/longitude/depth
-            latitude, latitude_uncertainty = QuakeML._get_uncertain_child(
-                origin, QuakeML._add_namespace('latitude'))
-
-            catalog.iloc[i].latitude = latitude
-            catalog.iloc[i].latitudeUncertainty = latitude_uncertainty
-
-            longitude, longitude_uncertainty = QuakeML._get_uncertain_child(
-                origin, QuakeML._add_namespace('longitude'))
-
-            catalog.iloc[i].longitude = longitude
-            catalog.iloc[i].longitudeUncertainty = longitude_uncertainty
-
-            depth, depth_uncertainty = QuakeML._get_uncertain_child(
-                origin, QuakeML._add_namespace('depth'))
-
-            catalog.iloc[i].depth = depth
-            catalog.iloc[i].depthUncertainty = depth_uncertainty
-
-            # agency/provider
-            catalog.iloc[i].agency = origin.find(
-                QuakeML._add_namespace('creationInfo')).findtext(
-                    QuakeML._add_namespace('author'))
-            # magnitude
-            magnitude = event.find(QuakeML._add_namespace('magnitude'))
-            mag_value, mag_uncertainty = QuakeML._get_uncertain_child(
-                magnitude, QuakeML._add_namespace('mag'))
-
-            catalog.iloc[i].magnitude = mag_value
-            catalog.iloc[i].magnitudeUncertainty = mag_uncertainty
-
-            # originUncertainty
-            origin_uncertainty = origin.find(
-                QuakeML._add_namespace('originUncertainty'))
-            catalog.iloc[i].horizontalUncertainty = QuakeML._as_float(
-                origin_uncertainty.find(
-                    QuakeML._add_namespace('horizontalUncertainty')).findtext(
-                        QuakeML._add_namespace('value')))
-            catalog.iloc[i].minHorizontalUncertainty = QuakeML._as_float(
-                origin_uncertainty.find(QuakeML._add_namespace(
-                    'minHorizontalUncertainty')).findtext(
-                        QuakeML._add_namespace('value')))
-            catalog.iloc[i].maxHorizontalUncertainty = QuakeML._as_float(
-                origin_uncertainty.find(QuakeML._add_namespace(
-                    'maxHorizontalUncertainty')).findtext(
-                        QuakeML._add_namespace('value')))
-            catalog.iloc[i].horizontalUncertainty = QuakeML._as_float(
-                origin_uncertainty.find(QuakeML._add_namespace(
-                    'azimuthMaxHorizontalUncertainty')).findtext(
-                        QuakeML._add_namespace('value')))
-
-            # plane
-            nodal_planes = event.find(
-                QuakeML._add_namespace('focalMechanism')).find(
-                    QuakeML._add_namespace('nodalPlanes'))
-            preferred_plane = nodal_planes.get('preferredPlane')
-            preferred_plane = nodal_planes.find(QuakeML._add_namespace(
-                'nodalPlane' + preferred_plane))
-            # GET uncertain child!!
-            strike, strike_uncertainty = QuakeML._get_uncertain_child(
-                preferred_plane, QuakeML._add_namespace('strike'))
-
-            catalog.iloc[i].strike = strike
-            catalog.iloc[i].strikeUncertainty = strike_uncertainty
-
-            dip, dip_uncertainty = QuakeML._get_uncertain_child(
-                preferred_plane, QuakeML._add_namespace('dip'))
-
-            catalog.iloc[i].dip = dip
-            catalog.iloc[i].dipUncertainty = dip_uncertainty
-
-            rake, rake_uncertainty = QuakeML._get_uncertain_child(
-                preferred_plane, QuakeML._add_namespace('rake'))
-
-            catalog.iloc[i].rake = rake
-            catalog.iloc[i].rake_uncertainty = rake_uncertainty
-
+            QuakeML._fill_series(catalog.iloc[i], event)
         return catalog
-
 
     @staticmethod
     def _as_float(possible_value):
@@ -271,7 +301,7 @@ class QuakeML(QuakeMLNamespaceAdderMixin, UtcToEventMixin):
         return cls(xml)
 
 
-class QuakeMLDataframe(QuakeMLNamespaceAdderMixin):
+class QuakeMLDataframe():
     '''
     Class to wrap the dataframe
     with quakeml data
@@ -294,12 +324,176 @@ class QuakeMLDataframe(QuakeMLNamespaceAdderMixin):
         xml = self.to_xml()
         return le.tostring(xml, pretty_print=True, encoding='unicode')
 
+    @staticmethod
+    def _add_focal_mechanism_element(event, quake):
+        # plane (write only fault plane not auxilliary)
+        focal_mechanism = le.SubElement(
+            event,
+            _add_quakeml_namespace('focalMechanism'),
+            {
+                'publicID': QuakeMLDataframe._add_id_prefix(
+                    str(quake.eventID)
+                )
+            }
+        )
+        nodal_planes = le.SubElement(
+            focal_mechanism,
+            _add_quakeml_namespace('nodalPlanes'),
+            {
+                'preferredPlane': '1'
+            }
+        )
+        nodal_plane1 = le.SubElement(
+            nodal_planes,
+            _add_quakeml_namespace('nodalPlane1')
+        )
+        nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
+            nodal_plane1,
+            childname='strike',
+            value=str(quake.strike),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.strikeUncertainty
+            )
+        )
+        nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
+            nodal_plane1,
+            childname='dip',
+            value=str(quake.dip),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.dipUncertainty
+            )
+        )
+        nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
+            nodal_plane1,
+            childname='rake',
+            value=str(quake.rake),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.rakeUncertainty
+            )
+        )
+
+    @staticmethod
+    def _add_origin_element(event, quake):
+        # origin
+        origin = le.SubElement(
+            event,
+            _add_quakeml_namespace('origin'),
+            {
+                'publicID': QuakeMLDataframe._add_id_prefix(
+                    str(quake.eventID)
+                )
+            }
+        )
+        origin = QuakeMLDataframe._add_uncertain_child(
+            origin,
+            childname='time',
+            value=QuakeMLDataframe._event2utc(quake),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.timeUncertainty
+            )
+        )
+        origin = QuakeMLDataframe._add_uncertain_child(
+            origin,
+            childname='latitude',
+            value=str(quake.latitude),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.latitudeUncertainty
+            )
+        )
+        origin = QuakeMLDataframe._add_uncertain_child(
+            origin,
+            childname='longitude',
+            value=str(quake.longitude),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.longitudeUncertainty
+            )
+        )
+        origin = QuakeMLDataframe._add_uncertain_child(
+            origin,
+            childname='depth',
+            value=str(quake.depth),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.depthUncertainty
+            )
+        )
+        creation_info = le.SubElement(
+            origin,
+            _add_quakeml_namespace('creationInfo')
+        )
+        author = le.SubElement(creation_info, _add_quakeml_namespace('author'))
+        author.text = quake.agency
+        # originUncertainty
+        origin_uncertainty = le.SubElement(
+            origin,
+            _add_quakeml_namespace('originUncertainty')
+        )
+        horizontal_uncertainty = le.SubElement(
+            origin_uncertainty,
+            _add_quakeml_namespace('horizontalUncertainty')
+        )
+        horizontal_uncertainty.text = QuakeMLDataframe._format_xsdouble(
+            quake.horizontalUncertainty
+        )
+        min_horizontal_uncertainty = le.SubElement(
+            origin_uncertainty,
+            _add_quakeml_namespace('minHorizontalUncertainty')
+        )
+        min_horizontal_uncertainty.text = \
+            QuakeMLDataframe._format_xsdouble(
+                quake.minHorizontalUncertainty
+            )
+        max_horizontal_uncertainty = le.SubElement(
+            origin_uncertainty,
+            _add_quakeml_namespace('maxHorizontalUncertainty')
+        )
+        max_horizontal_uncertainty.text = \
+            QuakeMLDataframe._format_xsdouble(
+                quake.maxHorizontalUncertainty
+            )
+        azimuth_max_horizontal_uncertainty = le.SubElement(
+            origin_uncertainty,
+            _add_quakeml_namespace('azimuthMaxHorizontalUncertainty')
+        )
+        azimuth_max_horizontal_uncertainty.text = \
+            QuakeMLDataframe._format_xsdouble(
+                quake.azimuthMaxHorizontalUncertainty
+            )
+
+    @staticmethod
+    def _add_magnitude_element(event, quake):
+        # magnitude
+        magnitude = le.SubElement(
+            event,
+            _add_quakeml_namespace('magnitude'),
+            {
+                'publicID': QuakeMLDataframe._add_id_prefix(
+                    str(quake.eventID)
+                )
+            }
+        )
+        magnitude = QuakeMLDataframe._add_uncertain_child(
+            magnitude,
+            childname='mag',
+            value=str(quake.magnitude),
+            uncertainty=QuakeMLDataframe._format_xsdouble(
+                quake.magnitudeUncertainty
+            )
+        )
+        mtype = le.SubElement(magnitude, _add_quakeml_namespace('type'))
+        mtype.text = 'MW'
+        creation_info = le.SubElement(
+            magnitude,
+            _add_quakeml_namespace('creationInfo')
+        )
+        author = le.SubElement(creation_info, _add_quakeml_namespace('author'))
+        author.text = quake.agency
+
     def to_xml(self):
         '''
         Given a pandas dataframe with events returns QuakeML version of
         the catalog
         '''
-        add_namespace = QuakeMLDataframe._add_namespace
+        add_namespace = _add_quakeml_namespace
         quakeml = le.Element(
             add_namespace('eventParameters'),
             publicID=QuakeMLDataframe._add_id_prefix('0')
@@ -334,161 +528,9 @@ class QuakeMLDataframe(QuakeMLNamespaceAdderMixin):
             description = le.SubElement(event, add_namespace('description'))
             text = le.SubElement(description, add_namespace('text'))
             text.text = str(quake.type)
-            # origin
-            origin = le.SubElement(
-                event,
-                add_namespace('origin'),
-                {
-                    'publicID': QuakeMLDataframe._add_id_prefix(
-                        str(quake.eventID)
-                    )
-                }
-            )
-            origin = QuakeMLDataframe._add_uncertain_child(
-                origin,
-                childname='time',
-                value=QuakeMLDataframe._event2utc(quake),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.timeUncertainty
-                )
-            )
-            origin = QuakeMLDataframe._add_uncertain_child(
-                origin,
-                childname='latitude',
-                value=str(quake.latitude),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.latitudeUncertainty
-                )
-            )
-            origin = QuakeMLDataframe._add_uncertain_child(
-                origin,
-                childname='longitude',
-                value=str(quake.longitude),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.longitudeUncertainty
-                )
-            )
-            origin = QuakeMLDataframe._add_uncertain_child(
-                origin,
-                childname='depth',
-                value=str(quake.depth),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.depthUncertainty
-                )
-            )
-            creation_info = le.SubElement(
-                origin,
-                add_namespace('creationInfo')
-            )
-            author = le.SubElement(creation_info, add_namespace('author'))
-            author.text = quake.agency
-            # originUncertainty
-            origin_uncertainty = le.SubElement(
-                origin,
-                add_namespace('originUncertainty')
-            )
-            horizontal_uncertainty = le.SubElement(
-                origin_uncertainty,
-                add_namespace('horizontalUncertainty')
-            )
-            horizontal_uncertainty.text = QuakeMLDataframe._format_xsdouble(
-                quake.horizontalUncertainty
-            )
-            min_horizontal_uncertainty = le.SubElement(
-                origin_uncertainty,
-                add_namespace('minHorizontalUncertainty')
-            )
-            min_horizontal_uncertainty.text = \
-                QuakeMLDataframe._format_xsdouble(
-                    quake.minHorizontalUncertainty
-                )
-            max_horizontal_uncertainty = le.SubElement(
-                origin_uncertainty,
-                add_namespace('maxHorizontalUncertainty')
-            )
-            max_horizontal_uncertainty.text = \
-                QuakeMLDataframe._format_xsdouble(
-                    quake.maxHorizontalUncertainty
-                )
-            azimuth_max_horizontal_uncertainty = le.SubElement(
-                origin_uncertainty,
-                add_namespace('azimuthMaxHorizontalUncertainty')
-            )
-            azimuth_max_horizontal_uncertainty.text = \
-                QuakeMLDataframe._format_xsdouble(
-                    quake.azimuthMaxHorizontalUncertainty
-                )
-            # magnitude
-            magnitude = le.SubElement(
-                event,
-                add_namespace('magnitude'),
-                {
-                    'publicID': QuakeMLDataframe._add_id_prefix(
-                        str(quake.eventID)
-                    )
-                }
-            )
-            magnitude = QuakeMLDataframe._add_uncertain_child(
-                magnitude,
-                childname='mag',
-                value=str(quake.magnitude),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.magnitudeUncertainty
-                )
-            )
-            mtype = le.SubElement(magnitude, add_namespace('type'))
-            mtype.text = 'MW'
-            creation_info = le.SubElement(
-                magnitude,
-                add_namespace('creationInfo')
-            )
-            author = le.SubElement(creation_info, add_namespace('author'))
-            author.text = quake.agency
-            # plane (write only fault plane not auxilliary)
-            focal_mechanism = le.SubElement(
-                event,
-                add_namespace('focalMechanism'),
-                {
-                    'publicID': QuakeMLDataframe._add_id_prefix(
-                        str(quake.eventID)
-                    )
-                }
-            )
-            nodal_planes = le.SubElement(
-                focal_mechanism,
-                add_namespace('nodalPlanes'),
-                {
-                    'preferredPlane': '1'
-                }
-            )
-            nodal_plane1 = le.SubElement(
-                nodal_planes,
-                add_namespace('nodalPlane1')
-            )
-            nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
-                nodal_plane1,
-                childname='strike',
-                value=str(quake.strike),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.strikeUncertainty
-                )
-            )
-            nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
-                nodal_plane1,
-                childname='dip',
-                value=str(quake.dip),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.dipUncertainty
-                )
-            )
-            nodal_plane1 = QuakeMLDataframe._add_uncertain_child(
-                nodal_plane1,
-                childname='rake',
-                value=str(quake.rake),
-                uncertainty=QuakeMLDataframe._format_xsdouble(
-                    quake.rakeUncertainty
-                )
-            )
+            QuakeMLDataframe._add_origin_element(event, quake)
+            QuakeMLDataframe._add_magnitude_element(event, quake)
+            QuakeMLDataframe._add_focal_mechanism_element(event, quake)
 
         return quakeml
 
@@ -497,7 +539,7 @@ class QuakeMLDataframe(QuakeMLNamespaceAdderMixin):
         '''
         Adds an uncertain child with value/uncertainty pair
         '''
-        add_namespace = QuakeMLDataframe._add_namespace
+        add_namespace = _add_quakeml_namespace
         child = le.SubElement(parent, add_namespace(childname))
         val = le.SubElement(child, add_namespace('value'))
         val.text = str(value)
@@ -542,7 +584,10 @@ class QuakeMLDataframe(QuakeMLNamespaceAdderMixin):
         )
 
 
-class Shakemap(UtcToEventMixin):
+class Shakemap():
+    '''
+    Class for accessing the shakemap data.
+    '''
     def __init__(self, shakeml, x_column='LON', y_column='LAT'):
         self._shakeml = shakeml
         self._x_column = x_column
@@ -550,9 +595,16 @@ class Shakemap(UtcToEventMixin):
 
     @classmethod
     def from_xml(cls, shakemap_xml):
+        '''
+        Constructs the instane from an xml element.
+        '''
         return cls(shakemap_xml)
 
     def to_intensity_geodataframe(self):
+        '''
+        Returns the concent of the intensity map
+        as a geodataframe.
+        '''
         dataframe = self.to_intensity_dataframe()
         geodataframe = gpd.GeoDataFrame(
             dataframe,
@@ -563,6 +615,46 @@ class Shakemap(UtcToEventMixin):
         )
         return geodataframe
 
+    @staticmethod
+    def _extract_numbers_from_grid(grid_data):
+        tokens = tokenize.tokenize(
+            io.BytesIO(
+                grid_data.text.encode('utf-8')
+            ).readline
+        )
+        token_before = None
+        for token in tokens:
+            # number
+            if token.type == 2:
+                value = float(token.string)
+                if token_before is not None and token_before.string == '-':
+                    value = -1 * value
+                yield value
+            token_before = token
+
+    def _grid_to_data_dict(self, grid_data, column_names, value_column_prefix):
+        data_dict = collections.defaultdict(list)
+
+        index = 0
+        for value in Shakemap._extract_numbers_from_grid(grid_data):
+            # 2 is number
+            if index >= len(column_names):
+                index = 0
+            name = column_names[index]
+            if name not in (self._x_column, self._y_column):
+                name = value_column_prefix + name
+            data_dict[name].append(value)
+            index += 1
+        return data_dict
+
+    def _grid_to_dataframe(self, grid_data, column_names, value_column_prefix):
+        data_dict = self._grid_to_data_dict(
+            grid_data,
+            column_names,
+            value_column_prefix
+        )
+        return pd.DataFrame(data_dict)
+
     def to_intensity_dataframe(self):
         '''
         Converts the intensities to
@@ -572,44 +664,29 @@ class Shakemap(UtcToEventMixin):
         shakeml = self._shakeml
         nsmap = shakeml.nsmap
 
-        #columns
-        grid_fields = shakeml.findall('grid_field',namespaces = nsmap)
+        # columns
+        grid_fields = shakeml.findall('grid_field', namespaces=nsmap)
 
-        #indices (start at 1) & argsort them
-        column_idxs = [int(grid_field.attrib['index'])-1 for grid_field in grid_fields]
+        # indices (start at 1) & argsort them
+        column_idxs = [
+            int(grid_field.attrib['index']) - 1
+            for grid_field in grid_fields
+        ]
         idxs_sorted = np.argsort(column_idxs)
-        column_names = [grid_field.attrib['name'] for grid_field in grid_fields]
+        column_names = [
+            grid_field.attrib['name']
+            for grid_field in grid_fields
+        ]
         columns = [column_names[idx] for idx in idxs_sorted]
 
-        grid_data = shakeml.find('grid_data',namespaces = nsmap)
-
-        data_dict = collections.defaultdict(list)
-        tokens = tokenize.tokenize(
-            io.BytesIO(
-                grid_data.text.encode('utf-8')
-            ).readline
+        # get grid
+        grid_data = self._grid_to_dataframe(
+            shakeml.find('grid_data', namespaces=nsmap),
+            columns,
+            'value_'
         )
-        index = 0
-        token_before = None
-        for token in tokens:
-            # 2 is number
-            if token.type == 2:
-                if index >= len(column_names):
-                    index = 0
-                name = column_names[index]
-                if name not in (self._x_column, self._y_column):
-                    name = 'value_' + name
-                value = float(token.string)
-                if token_before is not None and token_before.string == '-':
-                    value = -1 * value
-                data_dict[name].append(value)
-                index += 1
-            token_before = token
 
-        #get grid
-        grid_data = pd.DataFrame(data_dict)
-
-        #get units
+        # get units
         for grid_field in grid_fields:
             unit_name = grid_field.attrib['name']
             unit_value = grid_field.attrib['units']
@@ -618,6 +695,9 @@ class Shakemap(UtcToEventMixin):
         return grid_data
 
     def to_intensity_raster(self, value_column):
+        '''
+        Returns the shakemap intensities as a raster.
+        '''
         dataframe = self.to_intensity_dataframe()
         return Shakemap.dataframe2raster(
             dataframe,
@@ -627,44 +707,70 @@ class Shakemap(UtcToEventMixin):
         )
 
     @staticmethod
+    def _map_to_integers_and_get_old_cell_size(series):
+        sorted_values = sorted(set(series))
+
+        cell_size = np.mean(np.diff(sorted_values))
+
+        map_values = {}
+        for index, value in enumerate(sorted_values):
+            map_values[value] = index
+
+        mapped_series = series.apply(lambda x: map_values[x])
+
+        return mapped_series, cell_size
+
+    @staticmethod
     def dataframe2raster(dataframe, x_column, y_column, value_column):
-        # the following code works as long as the grid
-        # is regular
-        # it will not work if the grid is irregular
-        sorted_x_values = sorted(set(dataframe[x_column]))
-        sorted_y_values = sorted(set(dataframe[y_column]))
-
-        x_cell_size = np.mean(np.diff(sorted_x_values))
-        y_cell_size = np.mean(np.diff(sorted_y_values))
-
-        map_x_values = {}
-        for index, x_value in enumerate(sorted_x_values):
-            map_x_values[x_value] = index
-        map_y_values = {}
-        for index, y_value in enumerate(sorted_y_values):
-            map_y_values[y_value] = index
-
+        '''
+        Converts the dataframe to a raster.
+        Please note: this works only for
+        regular grids at the moment.
+        '''
         intermediate_dataframe = pd.DataFrame({
             'value': dataframe[value_column]
         })
 
-        intermediate_dataframe['x'] = dataframe[x_column].apply(lambda x: map_x_values[x])
-        intermediate_dataframe['y'] = dataframe[y_column].apply(lambda y: map_y_values[y])
+        intermediate_dataframe['x'], x_cell_size = \
+            Shakemap._map_to_integers_and_get_old_cell_size(
+                dataframe[x_column]
+            )
+        intermediate_dataframe['y'], y_cell_size = \
+            Shakemap._map_to_integers_and_get_old_cell_size(
+                dataframe[y_column]
+            )
 
-        raster = gr.from_pandas(intermediate_dataframe, value='value', x='x', y='y')
+        raster = gr.from_pandas(
+            intermediate_dataframe,
+            value='value',
+            x='x',
+            y='y'
+        )
         raster.bounds = (
             dataframe[x_column].min(),
             dataframe[y_column].min(),
             dataframe[x_column].max(),
             dataframe[y_column].max()
         )
-        raster.x_cell_size = x_cell_size
-        raster.y_cell_size = y_cell_size
-        # TODO
-        # check if this handling is enough
-        # to make this work for the raster conversion
+        raster.x_cell_size = np.abs(x_cell_size)
+        raster.y_cell_size = -1 * np.abs(y_cell_size)
+        proj = osr.SpatialReference()
+        proj.ImportFromEPSG(4326)
+        raster.projection = proj
+        raster.xmin = raster.bounds[0]
+        raster.xmax = raster.bounds[2]
+        raster.ymin = raster.bounds[1]
+        raster.ymax = raster.bounds[3]
+        raster.geot = (
+            # first one is the minimum x
+            raster.xmin,
+            # then the x_cell_size
+            raster.x_cell_size,
+            0,
+            # then the hights possible y
+            raster.ymax,
+            0,
+            # and the y cell size
+            raster.y_cell_size
+        )
         return raster
-
-
-
-
