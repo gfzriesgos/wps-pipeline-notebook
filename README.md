@@ -26,6 +26,7 @@ ipython3 kernel install --user --name=wps-pipeline-notebook
 It can be that you also have to install the basemap package yourself:
 
 ```
+pip3 install wheel
 pip3 install -U git+https://github.com/matplotlib/basemap.git 
 ```
 
