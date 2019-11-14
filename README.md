@@ -22,7 +22,7 @@ python3 -m venv wps-pipeline-notebook
 source wps-pipeline-notebook/bin/activate
 pip3 install -r requirements.txt
 pip3 install wheel
-pip3 install -U git+https://github.com/matplotlib/basemap.git@v1.2.1rel
+pip3 install https://github.com/matplotlib/basemap/archive/v1.2.1rel.tar.gz
 ipython3 kernel install --user --name=wps-pipeline-notebook
 ```
 

@@ -4,7 +4,7 @@ backcall==0.1.0
 #basemap==1.2.1
 certifi==2019.6.16
 chardet==3.0.4
-Click==7.0
+Click==6.7
 click-plugins==1.1.1
 cligj==0.5.0
 coverage==4.5.4
